@@ -98,11 +98,11 @@ def extract_json(content: str) -> Any:
 
 
 if __name__ == "__main__":
-    # 간단한 수동 점검: python llm_client.py <base_url> <model>
+    # 간단한 수동 점검: python3 llm_client.py <base_url> <model>
     import sys
 
     if len(sys.argv) < 3:
-        print("usage: python llm_client.py <base_url> <model>")
+        print("usage: python3 llm_client.py <base_url> <model>")
         raise SystemExit(2)
     base_url, model = sys.argv[1], sys.argv[2]
     out = chat(

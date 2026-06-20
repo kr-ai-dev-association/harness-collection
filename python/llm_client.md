@@ -39,7 +39,7 @@ content = chat(
 data = extract_json(content)   # 코드펜스/잡음 방어 파싱
 ```
 
-수동 점검: `python llm_client.py <base_url> <model>`
+수동 점검: `python3 llm_client.py <base_url> <model>`
 
 ## 주의사항
 
