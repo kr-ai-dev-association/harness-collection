@@ -15,10 +15,10 @@
 ## 사용
 ```bash
 # 대상 앱 디렉터리에서
-/path/to/e2e-llm-harness/e2e-harness
+/path/to/nodejs/e2e-llm-harness/e2e-harness
 
 # 또는 --cwd 로 대상 지정, `--` 뒤는 playwright 로 그대로 전달
-/path/to/e2e-llm-harness/e2e-harness --cwd ./my-app -- --workers 1
+/path/to/nodejs/e2e-llm-harness/e2e-harness --cwd ./my-app -- --workers 1
 ```
 
 종료 코드는 Playwright의 종료 코드를 그대로 따른다(실패 시 1).
