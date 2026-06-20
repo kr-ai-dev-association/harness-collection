@@ -1,22 +1,18 @@
 ---
-name: e2e-llm-harness
-description: Playwright e2e 테스트를 생성·탐색·실행·분석하는 LLM 무관 하니스. e2e 테스트를 만들거나 돌리거나 실패 원인을 분석할 때 사용.
+name: e2e-harness
+description: Playwright e2e 테스트를 찾아 실행하는 최소 러너. Playwright 미설치 시 자동 설치하고, 디렉터리 내 spec 파일을 찾아 돌린 뒤 결과/에러를 그대로 출력.
 ---
 
-# e2e-llm-harness
+# e2e-harness
 
 소스/상세: https://github.com/kr-ai-dev-association/harness-collection (`e2e-llm-harness/`)
 
-## 사용 (`--cwd`는 대상 프로젝트 루트)
-`e2e-harness` 래퍼를 호출하면 **첫 실행 때만 자동으로 install/build 하고, 이후엔 건너뛴다.** 별도 설치 단계 불필요.
+## 사용
 ```bash
-HARNESS=/path/to/e2e-llm-harness/e2e-harness
-$HARNESS discover --cwd <APP>                                          # 스펙 탐색
-$HARNESS run --cwd <APP> --workers 1 [spec...] --out result.md         # 실행
-$HARNESS analyze --cwd <APP> --workers 1 [spec...] --out result.md     # 실행+LLM 분석
-$HARNESS pipeline --cwd <APP> --out result.md                         # 탐색→실행→분석
-$HARNESS generate "<시나리오>" --out e2e/x.spec.ts --cwd <APP>         # 스펙 생성
+# 대상 앱 디렉터리에서 실행 (또는 --cwd 로 지정)
+/path/to/e2e-llm-harness/e2e-harness
+/path/to/e2e-llm-harness/e2e-harness --cwd <APP> -- --workers 1
 ```
-- 리포트는 stdout + `--out` 파일에 저장된다. **러너가 명령을 백그라운드로 돌리면 stdout이 안 보일 수 있으니 항상 `--out`을 주고 그 파일을 읽어라.**
-- 실패가 있으면 종료 코드 1.
-- `generate`/`analyze`/`pipeline`은 LLM 연동이 필요하다(설정은 README 참고).
+- 하는 일: Playwright 없으면 설치 → `*.spec.ts/js` 찾기 → 실행 → Playwright 출력 그대로.
+- `--` 뒤 인자는 `playwright test` 로 전달된다.
+- 종료 코드는 Playwright를 그대로 따른다(실패 시 1).

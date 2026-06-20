@@ -1,29 +1,61 @@
-#!/usr/bin/env bash
-# Self-bootstrapping launcher for e2e-llm-harness.
-# Installs deps and builds ONLY when missing/stale, then runs the CLI.
-# Usage (from your app dir):  ../e2e-llm-harness/e2e-harness run --cwd . --out result.md ...
-set -euo pipefail
+#!/usr/bin/env node
+/*
+ * Minimal Playwright e2e harness.
+ *   1) Installs Playwright if it's missing in the target project.
+ *   2) Finds *.spec.ts / *.spec.js under the target dir (skips node_modules).
+ *   3) Runs them and passes Playwright's output (result + errors) through as-is.
+ *
+ * Usage (from your app dir, or pass --cwd):
+ *   /path/to/e2e-harness
+ *   /path/to/e2e-harness --cwd ./my-app -- --workers 1
+ * Anything after `--` (or unknown args) is forwarded to `playwright test`.
+ */
+import { spawnSync } from "node:child_process";
+import { existsSync, readdirSync, statSync } from "node:fs";
+import path from "node:path";
 
-HARNESS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ORIG_PWD="$PWD"
+const argv = process.argv.slice(2);
+let cwd = process.cwd();
+const forward = [];
+for (let i = 0; i < argv.length; i++) {
+  if (argv[i] === "--cwd") cwd = path.resolve(argv[++i] ?? ".");
+  else if (argv[i] === "--") forward.push(...argv.slice(i + 1)), (i = argv.length);
+  else forward.push(argv[i]);
+}
 
-# All bootstrap output goes to stderr so it never pollutes the stdout report.
-(
-  cd "$HARNESS_DIR"
+function run(cmd, args) {
+  const r = spawnSync(cmd, args, { cwd, stdio: "inherit", shell: process.platform === "win32" });
+  return r.status ?? 1;
+}
 
-  # 1) Install deps only if node_modules is absent.
-  if [ ! -d node_modules ]; then
-    echo "[e2e-harness] installing dependencies..." >&2
-    npm install
-  fi
+// 1) Ensure Playwright is installed in the target project.
+const hasPlaywright =
+  existsSync(path.join(cwd, "node_modules", ".bin", "playwright")) ||
+  existsSync(path.join(cwd, "node_modules", "@playwright", "test"));
+if (!hasPlaywright) {
+  console.error("[harness] Playwright not found — installing @playwright/test...");
+  if (run("npm", ["install", "-D", "@playwright/test"]) !== 0) process.exit(1);
+  if (run("npx", ["playwright", "install"]) !== 0) process.exit(1);
+}
 
-  # 2) Build only if dist is missing or any src file is newer than the built CLI.
-  if [ ! -f dist/cli.js ] || [ -n "$(find src -type f -newer dist/cli.js 2>/dev/null)" ]; then
-    echo "[e2e-harness] building..." >&2
-    npm run build
-  fi
-) 1>&2
+// 2) Find spec files.
+function findSpecs(dir) {
+  const out = [];
+  for (const name of readdirSync(dir)) {
+    if (name === "node_modules" || name.startsWith(".")) continue;
+    const full = path.join(dir, name);
+    if (statSync(full).isDirectory()) out.push(...findSpecs(full));
+    else if (/\.spec\.[jt]s$/.test(name)) out.push(path.relative(cwd, full));
+  }
+  return out;
+}
+const specs = findSpecs(cwd);
+if (specs.length === 0) {
+  console.error(`[harness] no *.spec.ts/js files found under ${cwd}`);
+  process.exit(1);
+}
+console.error(`[harness] running ${specs.length} spec file(s):`);
+for (const s of specs) console.error(`  - ${s}`);
 
-# Run the CLI from the caller's directory so --cwd and relative paths resolve correctly.
-cd "$ORIG_PWD"
-exec node "$HARNESS_DIR/dist/cli.js" "$@"
+// 3) Run; Playwright's result/error output is inherited (printed as-is).
+process.exit(run("npx", ["playwright", "test", ...specs, ...forward]));
