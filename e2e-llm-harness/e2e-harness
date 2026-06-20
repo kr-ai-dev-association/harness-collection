@@ -3,15 +3,17 @@
  * Minimal Playwright e2e harness.
  *   1) Installs Playwright if it's missing in the target project.
  *   2) Finds *.spec.ts / *.spec.js under the target dir (skips node_modules).
- *   3) Runs them and passes Playwright's output (result + errors) through as-is.
+ *   3) Runs them, passing Playwright's output (result + errors) through as-is,
+ *      and ALSO tees it to a log file so the result is retrievable even when a
+ *      runner backgrounds the (long) command and hides its stdout.
  *
  * Usage (from your app dir, or pass --cwd):
  *   /path/to/e2e-harness
  *   /path/to/e2e-harness --cwd ./my-app -- --workers 1
  * Anything after `--` (or unknown args) is forwarded to `playwright test`.
  */
-import { spawnSync } from "node:child_process";
-import { existsSync, readdirSync, statSync } from "node:fs";
+import { spawn, spawnSync } from "node:child_process";
+import { createWriteStream, existsSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 
 const argv = process.argv.slice(2);
@@ -23,7 +25,9 @@ for (let i = 0; i < argv.length; i++) {
   else forward.push(argv[i]);
 }
 
-function run(cmd, args) {
+const logPath = path.join(cwd, "e2e-harness.log");
+
+function runInherit(cmd, args) {
   const r = spawnSync(cmd, args, { cwd, stdio: "inherit", shell: process.platform === "win32" });
   return r.status ?? 1;
 }
@@ -34,8 +38,8 @@ const hasPlaywright =
   existsSync(path.join(cwd, "node_modules", "@playwright", "test"));
 if (!hasPlaywright) {
   console.error("[harness] Playwright not found — installing @playwright/test...");
-  if (run("npm", ["install", "-D", "@playwright/test"]) !== 0) process.exit(1);
-  if (run("npx", ["playwright", "install"]) !== 0) process.exit(1);
+  if (runInherit("npm", ["install", "-D", "@playwright/test"]) !== 0) process.exit(1);
+  if (runInherit("npx", ["playwright", "install"]) !== 0) process.exit(1);
 }
 
 // 2) Find spec files.
@@ -54,8 +58,22 @@ if (specs.length === 0) {
   console.error(`[harness] no *.spec.ts/js files found under ${cwd}`);
   process.exit(1);
 }
-console.error(`[harness] running ${specs.length} spec file(s):`);
-for (const s of specs) console.error(`  - ${s}`);
 
-// 3) Run; Playwright's result/error output is inherited (printed as-is).
-process.exit(run("npx", ["playwright", "test", ...specs, ...forward]));
+// 3) Run; tee Playwright's output to the terminal AND to e2e-harness.log.
+const log = createWriteStream(logPath);
+const header = `[harness] running ${specs.length} spec file(s):\n` + specs.map((s) => `  - ${s}`).join("\n") + "\n";
+process.stderr.write(header);
+log.write(header);
+
+const child = spawn("npx", ["playwright", "test", ...specs, ...forward], {
+  cwd,
+  shell: process.platform === "win32",
+});
+child.stdout.on("data", (d) => { process.stdout.write(d); log.write(d); });
+child.stderr.on("data", (d) => { process.stderr.write(d); log.write(d); });
+child.on("error", (e) => { console.error(`[harness] ${e.message}`); process.exit(1); });
+child.on("close", (code) => {
+  const footer = `\n[harness] exit code ${code}. Full output saved to ${logPath}\n`;
+  process.stderr.write(footer);
+  log.end(footer, () => process.exit(code ?? 1));
+});

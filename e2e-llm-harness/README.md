@@ -5,6 +5,8 @@
 1. 대상 프로젝트에 Playwright가 없으면 설치한다 (`@playwright/test` + 브라우저).
 2. 디렉터리에서 `*.spec.ts` / `*.spec.js` 를 찾는다 (`node_modules` 제외).
 3. 실행하고 **Playwright가 출력하는 result/error를 그대로** 보여준다.
+   동시에 `<APP>/e2e-harness.log` 에도 저장하므로, 러너가 명령을 백그라운드로 돌려
+   화면 출력이 안 보여도 이 로그 파일에서 결과를 확인할 수 있다.
 
 ## 요구 사항
 - Node.js ≥ 18
