@@ -2,6 +2,33 @@
 
 LLM 개발 작업에 쓰는 작은 하니스 모음. **언어별 디렉터리**로 나누고, 각 코드 파일/디렉터리와 **같은 이름의 `.md`** 문서를 둔다.
 
+## 가져오기 & 실행
+
+각 하니스는 의존성·빌드가 없으므로 **받아서 바로 실행**한다. 별도 설치 과정은 없다.
+
+```bash
+# 1) 전체 클론
+git clone https://github.com/kr-ai-dev-association/harness-collection
+cd harness-collection
+
+# 2) 필요한 하니스의 .md(스킬 문서)를 읽고, 같은 이름의 코드를 실행
+#    python — 검사기:
+python python/fastapi_guard.py <TARGET_DIR>
+#    python — LLM 호출 헬퍼: 코드에서 import
+#      from llm_client import chat, with_today, extract_json   (sys.path 에 python/ 추가)
+#    nodejs — Playwright 러너:
+nodejs/e2e-llm-harness/e2e-harness --cwd <APP_DIR>
+```
+
+단일 파일 하니스는 클론 없이 **raw 다운로드**만으로도 쓸 수 있다.
+
+```bash
+curl -O https://raw.githubusercontent.com/kr-ai-dev-association/harness-collection/main/python/fastapi_guard.py
+python fastapi_guard.py <TARGET_DIR>
+```
+
+> 실행 전 해당 `.md`의 **요구 사항**(예: e2e는 Node ≥18·`playwright.config.*`, fastapi_guard는 Python, llm_client는 도달 가능한 엔드포인트)을 먼저 확인한다.
+
 ## 하위 `.md`는 스킬(skill) 문서다
 
 각 하니스의 `.md`는 **LLM/에이전트가 읽고 곧바로 실행에 옮기는 스킬 문서**로 쓰도록 설계되었다. 그래서:
