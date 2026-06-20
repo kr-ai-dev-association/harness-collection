@@ -40,24 +40,25 @@ Each harness's `.md` is designed as a **skill doc that an LLM/agent reads and ac
 
 Thanks to this rule, adding a new harness only takes one pair: "code + a thin same-named skill md".
 
-Most harnesses are a **single code file** (e.g. `fastapi_guard.py`), but a **complex harness may be a directory**. In that case put a `.md` of the same name as the directory next to it (e.g. `nodejs/e2e-llm-harness/` ↔ `nodejs/e2e-llm-harness.md`). Either way the "code (file or directory) ↔ same-named skill md" matching is the same.
+Most harnesses are a **single code file** (e.g. `fastapi_guard.py`); its `.md` sits next to it with the same name. A **complex harness is a directory**, and its same-named `.md` lives **inside that directory** so the doc travels with the harness when the directory is copied/installed (e.g. `nodejs/e2e-llm-harness/e2e-llm-harness.md`). Either way the doc stays with the code unit it documents.
 
 ```
 nodejs/
-  e2e-llm-harness/      # Playwright e2e runner (single script: e2e-harness)
-  e2e-llm-harness.md    # ^ doc
+  e2e-llm-harness/        # directory harness
+    e2e-harness           # the script (Playwright e2e runner)
+    e2e-llm-harness.md    # ^ doc — inside the dir, so it installs with the harness
 python/
-  fastapi_guard.py      # FastAPI+SQLAlchemy static rule checker
-  fastapi_guard.md      # ^ doc
-  llm_client.py         # OpenAI-compatible LLM call helper (thinking off)
-  llm_client.md         # ^ doc
+  fastapi_guard.py        # FastAPI+SQLAlchemy static rule checker
+  fastapi_guard.md        # ^ doc
+  llm_client.py           # OpenAI-compatible LLM call helper (thinking off)
+  llm_client.md           # ^ doc
 ```
 
 ## Catalog
 
 | Language | Harness | Purpose |
 |----------|---------|---------|
-| nodejs | [e2e-llm-harness](nodejs/e2e-llm-harness.md) | Install Playwright, discover specs, run, output as-is |
+| nodejs | [e2e-llm-harness](nodejs/e2e-llm-harness/e2e-llm-harness.md) | Install Playwright, discover specs, run, output as-is |
 | python | [fastapi_guard](python/fastapi_guard.md) | Static check for recurring defects in LLM-generated backend code |
 | python | [llm_client](python/llm_client.md) | Call an OpenAI-compatible LLM (thinking disabled, defensive parsing) |
 
