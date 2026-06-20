@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """
-FastAPI + SQLAlchemy 코딩 규칙 정적 검사기.
+Static checker for FastAPI + SQLAlchemy coding rules.
 
-LLM이 생성한 백엔드 코드에서 반복적으로 나오던 결함을 출력 전에 잡는다.
-표준 라이브러리 `ast`만 사용한다(무의존). 규칙 설명은 README.md 참고.
+Catches defects that recur in LLM-generated backend code before the code is
+shipped. Uses only the standard library (`ast`), no dependencies. See the
+rule descriptions in fastapi_guard.md.
 
-사용:
-    python3 fastapi_guard.py [TARGET_DIR]      # 기본값: 현재 디렉터리
-오류(error) 발견 시 종료 코드 1, 경고만 있거나 깨끗하면 0.
+Usage:
+    python3 fastapi_guard.py [TARGET_DIR]      # default: current directory
+Exit code 1 if any error is found, 0 if only warnings or clean.
 """
 from __future__ import annotations
 
@@ -34,7 +35,7 @@ class Finding:
 def analyze_file(path: Path, tree: ast.AST, findings: list[Finding], state: dict) -> None:
     rel = str(path)
 
-    # 파일 내 정의/임포트된 이름 수집 (규칙 2 휴리스틱용)
+    # Collect names defined/imported in this file (heuristic for rule 2)
     defined: set[str] = set()
     for node in ast.walk(tree):
         if isinstance(node, (ast.Import,)):
@@ -55,47 +56,47 @@ def analyze_file(path: Path, tree: ast.AST, findings: list[Finding], state: dict
             defined.add(node.arg)
 
     for node in ast.walk(tree):
-        # 규칙 1 — declarative_base() 호출 위치 집계 (프로젝트 전역에서 1번만)
+        # Rule 1 — collect declarative_base() call sites (must be exactly one project-wide)
         if isinstance(node, ast.Call) and _callee_name(node.func) == "declarative_base":
             state["declarative_base"].append((rel, node.lineno))
 
-        # 규칙 3 — create_all 존재 여부 집계
+        # Rule 3 — track whether create_all exists
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "create_all":
             state["create_all"] = True
 
         if isinstance(node, ast.Call):
-            # 규칙 4 — Model(**obj.__dict__) 언패킹 금지
+            # Rule 4 — forbid Model(**obj.__dict__) unpacking
             for kw in node.keywords:
                 if kw.arg is None and isinstance(kw.value, ast.Attribute) and kw.value.attr == "__dict__":
                     findings.append(Finding(rel, node.lineno, 4, "error",
-                        "ORM→스키마 변환에 **obj.__dict__ 사용 금지. model_validate(obj) + from_attributes 사용."))
+                        "ORM->schema: do not use **obj.__dict__. Use model_validate(obj) with from_attributes."))
 
-            # 규칙 5 — CORS: allow_credentials=True 이면서 allow_origins=["*"] 금지
+            # Rule 5 — CORS: forbid allow_credentials=True together with allow_origins=["*"]
             kws = {kw.arg: kw.value for kw in node.keywords if kw.arg}
             if _is_true(kws.get("allow_credentials")) and _has_wildcard(kws.get("allow_origins")):
                 findings.append(Finding(rel, node.lineno, 5, "error",
-                    'allow_credentials=True 와 allow_origins=["*"] 조합 금지. 명시적 오리진을 나열하라.'))
+                    'Do not combine allow_credentials=True with allow_origins=["*"]. List explicit origins.'))
 
-            # 규칙 7 — requests/httpx 호출에 timeout 필수
+            # Rule 7 — requests/httpx calls must pass timeout
             if (isinstance(node.func, ast.Attribute) and node.func.attr in HTTP_METHODS
                     and _callee_root(node.func.value) in HTTP_LIBS):
                 if not any(kw.arg == "timeout" for kw in node.keywords):
                     findings.append(Finding(rel, node.lineno, 7, "error",
-                        f"외부 HTTP 호출에 timeout= 누락 ({_callee_root(node.func.value)}.{node.func.attr})."))
+                        f"External HTTP call missing timeout= ({_callee_root(node.func.value)}.{node.func.attr})."))
 
-            # 규칙 6 — datetime.now() 타임존 미지정(naive) 경고
+            # Rule 6 — datetime.now() without timezone (naive) warning
             if (isinstance(node.func, ast.Attribute) and node.func.attr == "now"
                     and _callee_root(node.func.value) == "datetime"
                     and not node.args and not node.keywords):
                 findings.append(Finding(rel, node.lineno, 6, "warn",
-                    "datetime.now() 가 타임존 없이 사용됨. ZoneInfo 등으로 tz를 명시하라."))
+                    "datetime.now() used without a timezone. Specify tz (e.g. ZoneInfo)."))
 
-            # 규칙 2 — 대문자로 시작하는 미정의/미임포트 이름 호출 (NameError 후보)
+            # Rule 2 — call to a capitalized name that is not imported/defined (possible NameError)
             if isinstance(node.func, ast.Name):
                 name = node.func.id
                 if name[:1].isupper() and name not in defined and name not in BUILTINS:
                     findings.append(Finding(rel, node.lineno, 2, "error",
-                        f"'{name}' 를 호출하는데 import/정의가 없음 (NameError 후보)."))
+                        f"'{name}' is called but not imported/defined (possible NameError)."))
 
 
 def _callee_name(func: ast.AST) -> str | None:
@@ -107,7 +108,7 @@ def _callee_name(func: ast.AST) -> str | None:
 
 
 def _callee_root(node: ast.AST | None) -> str | None:
-    """`requests`, `datetime` 처럼 호출 체인의 최상위 이름을 반환."""
+    """Return the top-level name of a call chain, e.g. `requests`, `datetime`."""
     if isinstance(node, ast.Name):
         return node.id
     if isinstance(node, ast.Attribute):
@@ -139,30 +140,30 @@ def main(argv: list[str]) -> int:
         try:
             tree = ast.parse(f.read_text(encoding="utf-8"), filename=str(f))
         except SyntaxError as e:
-            findings.append(Finding(str(f), e.lineno or 0, 0, "error", f"구문 오류: {e.msg}"))
+            findings.append(Finding(str(f), e.lineno or 0, 0, "error", f"syntax error: {e.msg}"))
             continue
         analyze_file(f.relative_to(target), tree, findings, state)
 
-    # 규칙 1 — declarative_base 는 정확히 1번
+    # Rule 1 — declarative_base must be called exactly once
     bases = state["declarative_base"]
     if len(bases) > 1:
         for rel, line in bases:
             findings.append(Finding(rel, line, 1, "error",
-                f"declarative_base() 가 {len(bases)}번 호출됨. 단 한 곳(database.py)에서만 호출하고 나머지는 import 하라."))
-    # 규칙 3 — 모델이 있는데 create_all/마이그레이션이 없음
+                f"declarative_base() called {len(bases)} times. Call it once (database.py) and import it elsewhere."))
+    # Rule 3 — models exist but no create_all / migration
     if bases and not state["create_all"]:
         findings.append(Finding("(project)", 0, 3, "warn",
-            "declarative_base() 는 있으나 Base.metadata.create_all 호출이 없음(마이그레이션이 없다면 추가)."))
+            "declarative_base() present but no Base.metadata.create_all call (add it if there are no migrations)."))
 
     findings.sort(key=lambda x: (x.path, x.line, x.rule))
     errors = sum(1 for f in findings if f.level == "error")
     warns = sum(1 for f in findings if f.level == "warn")
 
     for f in findings:
-        icon = "✘" if f.level == "error" else "▲"
-        print(f"{icon} {f.path}:{f.line}  [규칙 {f.rule}] {f.msg}")
+        icon = "x" if f.level == "error" else "!"
+        print(f"{icon} {f.path}:{f.line}  [rule {f.rule}] {f.msg}")
 
-    print(f"\n[harness] 검사 파일 {len(files)}개 — 오류 {errors}, 경고 {warns}")
+    print(f"\n[harness] {len(files)} file(s) checked - {errors} error(s), {warns} warning(s)")
     return 1 if errors else 0
 
 

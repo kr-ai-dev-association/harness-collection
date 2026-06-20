@@ -1,61 +1,61 @@
 # llm_client
 
-OpenAI 호환 LLM 추론 서버(사내 Qwen/vLLM 등)를 연동하는 표준 사용법과 주의사항. 코드: `llm_client.py` (표준 라이브러리만, 무의존).
+Standard usage and caveats for calling an OpenAI-compatible LLM inference server (internal Qwen/vLLM, etc.). Code: `llm_client.py` (standard library only, no dependencies).
 
-## 엔드포인트 / 모델
+## Endpoint / Model
 
-| 항목 | 값 |
-|------|-----|
-| Base URL | `https://agentgo-qwen.changshininc.com/v1` (예시) |
+| Item | Value |
+|------|-------|
+| Base URL | `https://agentgo-qwen.changshininc.com/v1` (example) |
 | Chat | `POST {base_url}/chat/completions` |
-| 모델 목록 | `GET {base_url}/models` |
-| 모델 ID | `qwen3.5-122b` |
-| 서버 | vLLM (OpenAI 호환), max_model_len 131072 |
-| 인증 | 현재 없음 |
+| Models | `GET {base_url}/models` |
+| Model ID | `qwen3.5-122b` |
+| Server | vLLM (OpenAI-compatible), max_model_len 131072 |
+| Auth | none currently |
 
-> 모델 ID는 반드시 `/v1/models`로 확인한 정확한 값을 쓸 것. `qwen` 같은 축약명은 `404 The model 'qwen' does not exist` 를 반환한다.
+> Always use the exact model ID from `/v1/models`. A short name like `qwen` returns `404 The model 'qwen' does not exist`.
 
 ```bash
 curl -s {base_url}/models | jq '.data[].id'   # => "qwen3.5-122b"
 ```
 
-## thinking(추론) 비활성화 — 필수
+## Disable thinking — required
 
-`qwen3.5-122b`는 추론 모델이라 기본 호출 시 `message.content`가 `null`(사고는 `message.reasoning`)이 되고 응답이 매우 느리다(120초 초과 가능). 추출·분류 등 사고가 불필요한 작업은 thinking을 끈다 — `llm_client.chat(...)`의 `disable_thinking=True`(기본값)가 요청에 `chat_template_kwargs.enable_thinking=false`를 넣는다. 끄면 보통 4~6초에 `content`를 반환한다.
+`qwen3.5-122b` is a reasoning model: a plain call leaves `message.content` `null` (reasoning goes to `message.reasoning`) and is very slow (can exceed 120s). For extraction/classification and other tasks that don't need reasoning, turn thinking off — `llm_client.chat(...)` with `disable_thinking=True` (default) adds `chat_template_kwargs.enable_thinking=false` to the request. With it off, content typically returns in 4-6s.
 
-## 사용
+## Usage
 
 ```python
 from llm_client import chat, with_today, extract_json
 
 content = chat(
     [
-        {"role": "system", "content": "일정 정보를 추출해 유효한 JSON만 반환."},
-        {"role": "user", "content": with_today("오늘 오후 2시 삼성증권 미팅 잡아줘")},
+        {"role": "system", "content": "Extract schedule info and return valid JSON only."},
+        {"role": "user", "content": with_today("Set up a 2pm meeting with Samsung Securities today")},
     ],
     base_url="https://host/v1",
     model="qwen3.5-122b",
 )
-data = extract_json(content)   # 코드펜스/잡음 방어 파싱
+data = extract_json(content)   # defensive parse against code fences/noise
 ```
 
-수동 점검: `python3 llm_client.py <base_url> <model>`
+Manual check: `python3 llm_client.py <base_url> <model>`
 
-## 주의사항
+## Caveats
 
-1. **상대 날짜·시간** — 모델은 "지금"을 모른다. `오늘/내일/다음주` 를 다루면 `with_today()`로 현재 날짜를 주입하라(미주입 시 임의 과거 날짜로 변환).
-2. **타임아웃** — 122B는 thinking을 꺼도 4~6초 걸린다. `timeout`은 최소 30초(기본값). thinking을 켜는 작업이면 더 길게.
-3. **빈 content** — thinking이 켜져 있거나 `max_tokens`가 작아 잘리면 `content`가 빈다. `chat()`은 이때 `RuntimeError`를 던진다(`reasoning`이 있으면 thinking 힌트 포함). `finish_reason=length`는 토큰 부족.
-4. **구조화 출력(JSON)** — "JSON만 반환"을 지시해도 코드펜스/설명이 붙을 수 있다. `extract_json()`으로 방어 파싱하거나, 서버의 `response_format`(json_object/json_schema)·guided decoding으로 스키마를 강제하라. 정규식 폴백은 적용 범위가 좁아 안전망이 되기 어렵다.
-5. **네트워크 도달성** — 추론 서버는 사내망/VPN 전용. 외부망·CI에서는 DNS 실패(NXDOMAIN)/연결 거부 가능. `chat()`은 연결 실패 시 안내 메시지를 포함한 `RuntimeError`를 던진다.
-6. **max_tokens** — 짧은 구조화 응답은 512면 충분. 작은 값은 반드시 thinking off와 함께.
-7. **temperature** — 추출·분류 등 결정적 결과는 0.1 내외로 낮게.
+1. **Relative dates/times** — the model doesn't know "now". When handling `today/tomorrow/next week`, inject the current date via `with_today()` (otherwise it converts to an arbitrary past date).
+2. **Timeout** — even with thinking off, a 122B model takes 4-6s. Use at least 30s for `timeout` (default). Use more if thinking is on.
+3. **Empty content** — if thinking is on or `max_tokens` is too small (output truncated), `content` is empty. `chat()` raises `RuntimeError` in that case (with a thinking hint if `reasoning` is present). `finish_reason=length` means out of tokens.
+4. **Structured output (JSON)** — even when told "JSON only", code fences/prose may be added. Parse defensively with `extract_json()`, or enforce a schema with the server's `response_format` (json_object/json_schema) or guided decoding. A regex fallback covers too little to be a safety net.
+5. **Network reachability** — the inference server is intranet/VPN-only. From external networks or CI, DNS may fail (NXDOMAIN) or the connection may be refused. `chat()` raises a `RuntimeError` with a hint on connection failure.
+6. **max_tokens** — 512 is enough for short structured responses. Use small values only together with thinking off.
+7. **temperature** — keep it low (~0.1) for deterministic results like extraction/classification.
 
-## 체크리스트
-- [ ] 모델 ID를 `/v1/models`로 확인 (`qwen3.5-122b`)
-- [ ] 사고 불필요 작업에 `disable_thinking=True`
-- [ ] 상대 날짜 시 `with_today()`로 현재 시각 주입
-- [ ] `timeout` ≥ 30초
-- [ ] 빈 content / `finish_reason=length` 처리
-- [ ] JSON은 `extract_json()` 등으로 방어적 파싱
-- [ ] 대상 환경에서 엔드포인트 접근 가능
+## Checklist
+- [ ] Verified the model ID via `/v1/models` (`qwen3.5-122b`)
+- [ ] `disable_thinking=True` for tasks that don't need reasoning
+- [ ] Injected the current time via `with_today()` for relative dates
+- [ ] `timeout` >= 30s
+- [ ] Handled empty content / `finish_reason=length`
+- [ ] Parsed JSON defensively (e.g. `extract_json()`)
+- [ ] Endpoint reachable from the target environment

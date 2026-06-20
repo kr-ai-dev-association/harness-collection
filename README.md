@@ -1,64 +1,64 @@
 # harness-collection
 
-LLM 개발 작업에 쓰는 작은 하니스 모음. **언어별 디렉터리**로 나누고, 각 코드 파일/디렉터리와 **같은 이름의 `.md`** 문서를 둔다.
+A small collection of harnesses for LLM development work. Organized into **per-language directories**, with a **`.md` of the same name** next to each code file/directory.
 
-## 가져오기 & 실행
+## Get & Run
 
-각 하니스는 의존성·빌드가 없으므로 **받아서 바로 실행**한다. 별도 설치 과정은 없다.
+Each harness has no dependencies and no build step, so you **fetch it and run it directly**. There is no separate install step.
 
 ```bash
-# 1) 전체 클론
+# 1) Clone the whole repo
 git clone https://github.com/kr-ai-dev-association/harness-collection
 cd harness-collection
 
-# 2) 필요한 하니스의 .md(스킬 문서)를 읽고, 같은 이름의 코드를 실행
-#    python — 검사기:
+# 2) Read the harness's .md (skill doc), then run the same-named code
+#    python — checker:
 python3 python/fastapi_guard.py <TARGET_DIR>
-#    python — LLM 호출 헬퍼: 코드에서 import
-#      from llm_client import chat, with_today, extract_json   (sys.path 에 python/ 추가)
-#    nodejs — Playwright 러너:
+#    python — LLM call helper: import from code
+#      from llm_client import chat, with_today, extract_json   (add python/ to sys.path)
+#    nodejs — Playwright runner:
 nodejs/e2e-llm-harness/e2e-harness --cwd <APP_DIR>
 ```
 
-단일 파일 하니스는 클론 없이 **raw 다운로드**만으로도 쓸 수 있다.
+Single-file harnesses can be used with a **raw download** alone, without cloning.
 
 ```bash
 curl -O https://raw.githubusercontent.com/kr-ai-dev-association/harness-collection/main/python/fastapi_guard.py
 python3 fastapi_guard.py <TARGET_DIR>
 ```
 
-> 실행 전 해당 `.md`의 **요구 사항**(예: e2e는 Node ≥18·`playwright.config.*`, fastapi_guard는 Python, llm_client는 도달 가능한 엔드포인트)을 먼저 확인한다.
-> 예시는 `python3` 기준이다. `python`만 있는 환경이면 `python`으로 바꿔 실행한다.
+> Before running, check the **Requirements** in that `.md` (e.g. e2e needs Node ≥18 and `playwright.config.*`, fastapi_guard needs Python, llm_client needs a reachable endpoint).
+> Examples use `python3`. On environments that only have `python`, run with `python` instead.
 
-## 하위 `.md`는 스킬(skill) 문서다
+## The sub-`.md` files are skill docs
 
-각 하니스의 `.md`는 **LLM/에이전트가 읽고 곧바로 실행에 옮기는 스킬 문서**로 쓰도록 설계되었다. 그래서:
+Each harness's `.md` is designed as a **skill doc that an LLM/agent reads and acts on immediately**. Therefore:
 
-- **최소 토큰**으로 단순화되어 있다 — 배경 설명·예시를 늘어놓지 않고, 무엇을 어떻게 호출하는지만 담는다.
-- 문서는 로직을 글로 풀어 쓰지 않고 **옆의 실제 코드 파일을 호출하도록** 안내한다(예: `fastapi_guard.md` → `python3 fastapi_guard.py`, `llm_client.md` → `from llm_client import chat`). 즉 **문서는 얇게, 동작은 코드로**.
-- 코드 파일과 `.md` 파일명이 1:1로 일치하므로, 에이전트가 스킬 문서만 보고 바로 대응 코드를 찾아 실행할 수 있다.
+- It is simplified for **minimum tokens** — no long background or examples, only what to call and how.
+- The doc does not spell out logic in prose; it **points to the actual code file next to it** (e.g. `fastapi_guard.md` → `python3 fastapi_guard.py`, `llm_client.md` → `from llm_client import chat`). In short: **thin docs, behavior in code**.
+- Code file and `.md` filenames match 1:1, so an agent can find and run the corresponding code from the skill doc alone.
 
-이 규칙 덕분에 새 하니스를 추가할 때도 "코드 + 동명의 얇은 스킬 md" 한 쌍만 만들면 된다.
+Thanks to this rule, adding a new harness only takes one pair: "code + a thin same-named skill md".
 
-대부분의 하니스는 **단일 코드 파일**(예: `fastapi_guard.py`)이지만, **복잡한 하니스는 디렉터리**가 될 수 있다. 이때는 디렉터리와 같은 이름의 `.md`를 그 옆에 둔다(예: `nodejs/e2e-llm-harness/` ↔ `nodejs/e2e-llm-harness.md`). 어느 경우든 "코드(파일 또는 디렉터리) ↔ 동명의 스킬 md" 매칭은 동일하다.
+Most harnesses are a **single code file** (e.g. `fastapi_guard.py`), but a **complex harness may be a directory**. In that case put a `.md` of the same name as the directory next to it (e.g. `nodejs/e2e-llm-harness/` ↔ `nodejs/e2e-llm-harness.md`). Either way the "code (file or directory) ↔ same-named skill md" matching is the same.
 
 ```
 nodejs/
-  e2e-llm-harness/      # Playwright e2e 러너 (단일 스크립트 e2e-harness)
-  e2e-llm-harness.md    # ↑ 문서
+  e2e-llm-harness/      # Playwright e2e runner (single script: e2e-harness)
+  e2e-llm-harness.md    # ^ doc
 python/
-  fastapi_guard.py      # FastAPI+SQLAlchemy 정적 규칙 검사기
-  fastapi_guard.md      # ↑ 문서
-  llm_client.py         # OpenAI 호환 LLM 호출 헬퍼 (thinking off)
-  llm_client.md         # ↑ 문서
+  fastapi_guard.py      # FastAPI+SQLAlchemy static rule checker
+  fastapi_guard.md      # ^ doc
+  llm_client.py         # OpenAI-compatible LLM call helper (thinking off)
+  llm_client.md         # ^ doc
 ```
 
-## 목록
+## Catalog
 
-| 언어 | 하니스 | 용도 |
-|------|--------|------|
-| nodejs | [e2e-llm-harness](nodejs/e2e-llm-harness.md) | Playwright 설치·spec 탐색·실행, 출력 그대로 |
-| python | [fastapi_guard](python/fastapi_guard.md) | LLM 생성 백엔드 코드의 반복 결함 정적 검사 |
-| python | [llm_client](python/llm_client.md) | 사내 OpenAI 호환 LLM 호출(추론 비활성화·방어 파싱) |
+| Language | Harness | Purpose |
+|----------|---------|---------|
+| nodejs | [e2e-llm-harness](nodejs/e2e-llm-harness.md) | Install Playwright, discover specs, run, output as-is |
+| python | [fastapi_guard](python/fastapi_guard.md) | Static check for recurring defects in LLM-generated backend code |
+| python | [llm_client](python/llm_client.md) | Call an OpenAI-compatible LLM (thinking disabled, defensive parsing) |
 
-각 하니스는 의존성·빌드가 없는 단일 파일을 지향하되, 복잡하면 디렉터리로 둘 수 있다.
+Each harness aims to be a single dependency-free, build-free file, or a directory when it gets complex.

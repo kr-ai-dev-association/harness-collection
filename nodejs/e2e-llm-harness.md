@@ -1,24 +1,24 @@
 # e2e-harness
 
-아주 단순한 Playwright e2e 러너. 의존성·빌드 없는 단일 Node 스크립트.
+A very simple Playwright e2e runner. A single Node script with no dependencies and no build.
 
-1. 대상 프로젝트에 Playwright가 없으면 설치한다 (`@playwright/test` + 브라우저).
-2. 디렉터리에서 `*.spec.ts` / `*.spec.js` 를 찾는다 (`node_modules` 제외).
-3. 실행하고 **Playwright가 출력하는 result/error를 그대로** 보여준다.
-   동시에 `<APP>/e2e-harness.log` 에도 저장하므로, 러너가 명령을 백그라운드로 돌려
-   화면 출력이 안 보여도 이 로그 파일에서 결과를 확인할 수 있다.
+1. Installs Playwright if the target project doesn't have it (`@playwright/test` + browsers).
+2. Finds `*.spec.ts` / `*.spec.js` in the directory (excluding `node_modules`).
+3. Runs them and shows **Playwright's result/error output as-is**.
+   It also tees the output to `<APP>/e2e-harness.log`, so if a runner backgrounds the
+   command and hides its stdout, you can still read the result from that log file.
 
-## 요구 사항
+## Requirements
 - Node.js ≥ 18
-- 대상 프로젝트에 `playwright.config.*` 가 있어야 한다.
+- The target project must have a `playwright.config.*`.
 
-## 사용
+## Usage
 ```bash
-# 대상 앱 디렉터리에서
+# From the target app directory
 /path/to/nodejs/e2e-llm-harness/e2e-harness
 
-# 또는 --cwd 로 대상 지정, `--` 뒤는 playwright 로 그대로 전달
+# Or specify the target with --cwd; anything after `--` is forwarded to playwright
 /path/to/nodejs/e2e-llm-harness/e2e-harness --cwd ./my-app -- --workers 1
 ```
 
-종료 코드는 Playwright의 종료 코드를 그대로 따른다(실패 시 1).
+The exit code mirrors Playwright's exit code (1 on failure).
