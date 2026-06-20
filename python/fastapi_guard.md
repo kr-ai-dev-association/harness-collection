@@ -1,10 +1,10 @@
-# check
+# fastapi_guard
 
-LLM이 생성한 **FastAPI + SQLAlchemy** 코드에서 반복적으로 나오던 결함을, 코드 내보내기 전에 잡는 정적 검사기. 표준 라이브러리 `ast`만 사용하며 의존성·빌드가 없다. 코드: `check.py`.
+LLM이 생성한 **FastAPI + SQLAlchemy** 코드에서 반복적으로 나오던 결함을, 코드 내보내기 전에 잡는 정적 검사기. 표준 라이브러리 `ast`만 사용하며 의존성·빌드가 없다. 코드: `fastapi_guard.py`.
 
 ## 사용
 ```bash
-python check.py [TARGET_DIR]   # 기본값: 현재 디렉터리
+python fastapi_guard.py [TARGET_DIR]   # 기본값: 현재 디렉터리
 ```
 - 대상 디렉터리의 모든 `*.py`를 검사한다(`venv`, `__pycache__`, `node_modules` 등 제외).
 - **오류(✘)가 있으면 종료 코드 1**, 경고(▲)만 있거나 깨끗하면 0 → CI에 그대로 쓸 수 있다.
