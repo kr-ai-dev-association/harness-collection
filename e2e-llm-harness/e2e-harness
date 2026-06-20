@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# Self-bootstrapping launcher for e2e-llm-harness.
+# Installs deps and builds ONLY when missing/stale, then runs the CLI.
+# Usage (from your app dir):  ../e2e-llm-harness/e2e-harness run --cwd . --out result.md ...
+set -euo pipefail
+
+HARNESS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ORIG_PWD="$PWD"
+
+# All bootstrap output goes to stderr so it never pollutes the stdout report.
+(
+  cd "$HARNESS_DIR"
+
+  # 1) Install deps only if node_modules is absent.
+  if [ ! -d node_modules ]; then
+    echo "[e2e-harness] installing dependencies..." >&2
+    npm install
+  fi
+
+  # 2) Build only if dist is missing or any src file is newer than the built CLI.
+  if [ ! -f dist/cli.js ] || [ -n "$(find src -type f -newer dist/cli.js 2>/dev/null)" ]; then
+    echo "[e2e-harness] building..." >&2
+    npm run build
+  fi
+) 1>&2
+
+# Run the CLI from the caller's directory so --cwd and relative paths resolve correctly.
+cd "$ORIG_PWD"
+exec node "$HARNESS_DIR/dist/cli.js" "$@"

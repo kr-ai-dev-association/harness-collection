@@ -101,7 +101,9 @@ async function main(): Promise<void> {
       const harness = new E2EHarness({ cwd });
       const specs = positionals.slice(1);
       const run = await harness.run({ specs, workers, onOutput: (c) => process.stderr.write(c) });
-      console.log("\n" + formatSummaryLine(run));
+      const report = formatReport(run);
+      console.log("\n" + report);
+      await writeOut(cwd, str(flags, "out"), report);
       process.exitCode = run.summary.failed > 0 ? 1 : 0;
       break;
     }
@@ -133,7 +135,9 @@ async function main(): Promise<void> {
       const specs = positionals.slice(1);
       const run = await harness.run({ specs, workers, onOutput: (c) => process.stderr.write(c) });
       const analysis = await harness.analyze(run);
-      console.log("\n" + formatReport(run, analysis));
+      const report = formatReport(run, analysis);
+      console.log("\n" + report);
+      await writeOut(cwd, str(flags, "out"), report);
       process.exitCode = run.summary.failed > 0 ? 1 : 0;
       break;
     }
@@ -144,11 +148,7 @@ async function main(): Promise<void> {
         run: { workers, onOutput: (c) => process.stderr.write(c) },
       });
       console.log("\n" + result.report);
-      const out = str(flags, "out");
-      if (out) {
-        await fs.writeFile(path.resolve(cwd, out), result.report + "\n", "utf8");
-        console.error(`\nReport written to ${out}`);
-      }
+      await writeOut(cwd, str(flags, "out"), result.report);
       process.exitCode = result.run.summary.failed > 0 ? 1 : 0;
       break;
     }
@@ -163,6 +163,14 @@ async function main(): Promise<void> {
 async function readMaybe(cwd: string, file?: string): Promise<string | undefined> {
   if (!file) return undefined;
   return fs.readFile(path.resolve(cwd, file), "utf8");
+}
+
+/** Persist the report to a file so results survive backgrounded/stream-less runners. */
+async function writeOut(cwd: string, out: string | undefined, content: string): Promise<void> {
+  if (!out) return;
+  const abs = path.resolve(cwd, out);
+  await fs.writeFile(abs, content.endsWith("\n") ? content : content + "\n", "utf8");
+  console.error(`\nReport written to ${out}`);
 }
 
 main().catch((err) => {
