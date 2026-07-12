@@ -29,12 +29,34 @@ A 122B on-prem LLM probabilistically defaults to the PG/MySQL syntax it saw more
 | DB2_DIALECT | `org.hibernate.dialect.PostgreSQLDialect` etc. | `org.hibernate.dialect.DB2Dialect` | error |
 | DB2_LIMIT | `LIMIT n` | `FETCH FIRST n ROWS ONLY` | warn |
 
+**Known DB2 incompatibilities (factual completeness — see Origin):**
+
+| rule | banned (leak) | DB2 answer | level |
+|---|---|---|---|
+| DB2_ILIKE | `ILIKE` (PG) | `UPPER(col) LIKE UPPER(?)` | error |
+| DB2_PG_CAST | `x::type` (PG cast) | `CAST(x AS type)` | error |
+| DB2_GETDATE | `GETDATE()` (T-SQL) | `CURRENT TIMESTAMP` | error |
+| DB2_TSQL_LEN | `LEN(...)` (T-SQL) | `LENGTH(...)` | error |
+| DB2_TOP | `SELECT TOP n` (T-SQL) | `... FETCH FIRST n ROWS ONLY` | error |
+| DB2_ISNULL | `ISNULL(x, y)` (T-SQL/MySQL) | `COALESCE(x, y)` | error |
+| DB2_BACKTICK | `` `col` `` (MySQL) | `"col"` or unquoted | error |
+| DB2_ENUM | `ENUM('a','b')` (MySQL) | `VARCHAR + CHECK (col IN ...)` | error |
+| DB2_UNSIGNED | `INT UNSIGNED` (MySQL) | wider signed type (`BIGINT`) | error |
+| DB2_NEXTVAL | `nextval('s')` (PG) | `NEXT VALUE FOR s` | error |
+| DB2_LASTID | `LAST_INSERT_ID()` / `@@IDENTITY` | `IDENTITY_VAL_LOCAL()` | error |
+| DB2_MYSQL_DATEFN | `CURDATE`/`CURTIME`/`DATE_ADD`/`DATE_SUB` | `CURRENT DATE` · `col + n DAYS` | error |
+| DB2_RETURNING | `INSERT … RETURNING` (PG) | `SELECT … FROM FINAL TABLE (INSERT …)` | error |
+
 ## Origin (evidence)
 Only defects observed to recur in the qwen3.5-122b eval (springboot 27 + db2 17 files):
 - Dialect leaks — `NOW()` 33 · `SERIAL` 11 · `TIMESTAMPTZ` 2 · `AUTO_INCREMENT` 1 (sb-05/06/11, db2-01~15).
 - UPSERT — db2-04/05 emit only PG `ON CONFLICT`, DB2 `MERGE` **0 times** (a comment even said "using the PostgreSQL ON CONFLICT clause").
 - **TEXT type 7 hits / 4 files** (db2-07/11/14/15) · **jsonb 5 hits / 2 files** (db2-01/15, incl. `::jsonb` casts) — promoted on the db2-11~17 rescan.
 - By contrast the same advanced files' SQL PL procedures had **0** PL/SQL (`DBMS_OUTPUT`/`%TYPE`) or T-SQL leaks — generated correctly with DB2 `BEGIN…END`·`LISTAGG`·OLAP → no procedure-syntax rule (no speculation, principle 5).
+
+**Two tiers of evidence:**
+- **Observed** (DB2_SERIAL…DB2_JSONB): defects seen recurring in the qwen eval — principle 5, no speculation.
+- **Known-incompatibility** (DB2_ILIKE…DB2_RETURNING, 13 rules): not from observed recurrence but from the *factual* DB2 incompatibility surface — DB2 genuinely rejects these PG/MySQL/T-SQL constructs regardless. A limited on-prem model will eventually emit an unseen-but-breaking one, so completeness on this *factual* surface (not speculative quality lints — those stay observation-gated) maximizes DB2 reliability. Verified **0 false positives** on a valid-DB2 fixture (GENERATED IDENTITY / CURRENT TIMESTAMP / FETCH FIRST / MERGE / LENGTH / COALESCE / NEXT VALUE FOR / CAST all pass clean).
 
 ## Checklist (for the agent)
 - [ ] In a DB2 project, never use the "banned" column syntax above

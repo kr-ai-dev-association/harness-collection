@@ -91,6 +91,77 @@ RULES = [
      r"\bjsonb\b",
      "PostgreSQL jsonb type/cast (not in DB2)",
      "CLOB + DB2 JSON functions (JSON_VALUE / JSON_TABLE / SYSTOOLS.JSON2BSON)"),
+
+    # ── Known DB2 incompatibilities (factual, for version-correctness completeness) ──
+    # DB2 factually rejects these PG/MySQL/T-SQL constructs whether or not qwen was
+    # observed emitting them. Since the model has limits and will eventually emit an
+    # unseen-but-breaking one, completeness on the *known-incompatible* surface (not
+    # speculative quality lints) directly serves "make qwen run on DB2 as reliably as
+    # possible". Each regex is verified against a valid-DB2 fixture (0 false positives).
+    ("DB2_ILIKE", "error", SQL_LIKE,
+     r"\bILIKE\b",
+     "PostgreSQL ILIKE (not in DB2)",
+     "UPPER(col) LIKE UPPER(?) for case-insensitive match"),
+
+    ("DB2_PG_CAST", "error", SQL_LIKE,
+     r"::\s*[A-Za-z]",
+     "PostgreSQL '::' cast operator (not in DB2)",
+     "CAST(x AS type)"),
+
+    ("DB2_GETDATE", "error", SQL_LIKE,
+     r"\bGETDATE\s*\(",
+     "T-SQL GETDATE() (not in DB2)",
+     "CURRENT TIMESTAMP"),
+
+    ("DB2_TSQL_LEN", "error", SQL_LIKE,
+     r"\bLEN\s*\(",
+     "T-SQL LEN() (not in DB2; DB2 uses LENGTH)",
+     "LENGTH(x)"),
+
+    ("DB2_TOP", "error", SQL_LIKE,
+     r"\bSELECT\s+TOP\s+\d",
+     "T-SQL SELECT TOP n (not in DB2)",
+     "SELECT ... FETCH FIRST n ROWS ONLY"),
+
+    ("DB2_ISNULL", "error", SQL_LIKE,
+     r"\bISNULL\s*\(",
+     "T-SQL/MySQL ISNULL() function (not in DB2)",
+     "COALESCE(x, y)"),
+
+    ("DB2_BACKTICK", "error", SQL_LIKE,
+     r"`",
+     "MySQL backtick identifier quoting (not in DB2)",
+     'double-quote "col" or leave unquoted'),
+
+    ("DB2_ENUM", "error", SQL_LIKE,
+     r"\bENUM\s*\(",
+     "MySQL ENUM column type (not in DB2)",
+     "VARCHAR(n) + CHECK (col IN (...)) constraint"),
+
+    ("DB2_UNSIGNED", "error", SQL_LIKE,
+     r"\bUNSIGNED\b",
+     "MySQL UNSIGNED modifier (not in DB2)",
+     "use a wider signed type (e.g. BIGINT)"),
+
+    ("DB2_NEXTVAL", "error", SQL_LIKE,
+     r"\bnextval\s*\(",
+     "PostgreSQL nextval() sequence call (not in DB2)",
+     "NEXT VALUE FOR seq_name"),
+
+    ("DB2_LASTID", "error", SQL_LIKE,
+     r"\bLAST_INSERT_ID\s*\(|@@IDENTITY\b",
+     "MySQL LAST_INSERT_ID() / T-SQL @@IDENTITY (not in DB2)",
+     "IDENTITY_VAL_LOCAL()"),
+
+    ("DB2_MYSQL_DATEFN", "error", SQL_LIKE,
+     r"\b(CURDATE|CURTIME|DATE_ADD|DATE_SUB)\s*\(",
+     "MySQL date function (CURDATE/CURTIME/DATE_ADD/DATE_SUB) (not in DB2)",
+     "CURRENT DATE / CURRENT TIME · col + n DAYS / col - n DAYS"),
+
+    ("DB2_RETURNING", "error", SQL_LIKE,
+     r"\bRETURNING\b",
+     "PostgreSQL RETURNING clause (not in DB2)",
+     "SELECT ... FROM FINAL TABLE (INSERT ...)"),
 ]
 
 # Promoted: UPSERT(→MERGE, db2-04/05) · TEXT type(→CLOB/VARCHAR, db2-11/14) ·
