@@ -72,7 +72,7 @@ python/
 | python | [fastapi_guard](python/fastapi_guard.md) | Static check for recurring defects in LLM-generated backend code |
 | python | [llm_client](python/llm_client.md) | Call an OpenAI-compatible LLM (thinking disabled, defensive parsing) |
 | python | [db2_guard](python/db2_guard.md) | Static check for PG/MySQL/T-SQL dialect leaking into DB2 SQL/config (24 rules, exit 1) |
-| python | [springboot_guard](python/springboot_guard.md) | Static check for Spring Boot anti-patterns (warn) + SB3/Java16 version drift (error, pom-aware) |
+| python | [springboot_guard](python/springboot_guard.md) | Static check for Spring Boot anti-patterns (warn) + SB3-API/Java-feature version drift (13 error rules, SB+Java version gated) |
 | python | [eval_harness](python/eval_harness.md) | Orchestrate LLM-agent eval batches (process-group timeout, retry, model-verify, seed) |
 
 Each harness aims to be a single dependency-free, build-free file, or a directory when it gets complex.

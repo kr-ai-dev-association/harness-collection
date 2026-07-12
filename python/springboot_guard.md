@@ -8,8 +8,9 @@ python3 springboot_guard.py <paths ...>      # dirs/files (defaults to CWD)
 python3 springboot_guard.py --json <paths>   # machine-readable (JSON)
 ```
 - **warn** (11 quality/security rules): code still runs. A reactive guard can gate on the warn count.
-- **error** (3 drift rules): SB3/Java16+ idioms mixed into SB2.x/Java11 → **compile failure** → exit 1 (CI block).
-  If `pom.xml`/`build.gradle` shows **SB3.x, the drift rules auto-disable** (avoids false positives on SB3 projects).
+- **error** (13 version-drift rules): SB3/Java14-17 idioms mixed into SB2.x/Java11 → **compile failure** → exit 1 (CI block).
+  Two independent gates from `pom.xml`/`build.gradle`: 7 SB3-API rules fire only on **SB2.x** projects;
+  6 Java-feature rules fire only when the project's **Java major < the feature's requirement**.
 Standard library only.
 
 ## Requirements
@@ -32,13 +33,29 @@ A 122B on-prem LLM generates SB code that is *mechanically* fine most of the tim
 | SB_BROAD_CATCH | `catch (Exception e)` / `catch (Throwable t)` | catch specific exceptions or `@ControllerAdvice` | warn |
 | SB_UNBOUNDED_FINDALL | `repo.findAll()` (no-arg, loads all) | `findAll(Pageable)` → return `Page<T>` | warn |
 
-**Version drift (SB 2.x / Java 11 baseline — auto-disabled if pom says SB3.x):**
+**SB3-API drift (fires only when the build file says Spring Boot 2.x):**
 
-| rule | drift (compile failure) | correct way (SB2.5.2) | level |
+| rule | drift (compile failure on SB2.x) | correct way (SB2.5.x) | level |
 |---|---|---|---|
 | SB_JAKARTA_IMPORT | `import jakarta.*` | `import javax.*` (persistence/validation/servlet) | error |
 | SB_SB3_SECURITY | `SecurityFilterChain` bean / `authorizeHttpRequests` / `requestMatchers` | `WebSecurityConfigurerAdapter` + `authorizeRequests().antMatchers()` | error |
-| SB_JAVA_RECORD | `public record X(...)` (Java16+) | regular class + constructor/getters (or Lombok) | error |
+| SB_ENABLE_METHOD_SEC | `@EnableMethodSecurity` (Security 5.6+) | `@EnableGlobalMethodSecurity(prePostEnabled = true)` | error |
+| SB_RESTCLIENT | `RestClient` (Spring 6.1) | `RestTemplate` (with timeouts) or `WebClient` | error |
+| SB_PROBLEM_DETAIL | `ProblemDetail` (Spring 6) | custom error DTO + `@ExceptionHandler` | error |
+| SB_HTTP_EXCHANGE | `@HttpExchange`/`@GetExchange` … (Spring 6) | `RestTemplate`/`WebClient` (or OpenFeign) | error |
+| SB_AUTOCONFIGURATION | `@AutoConfiguration` (SB2.7+) | `@Configuration` + `spring.factories` | error |
+
+**Java-feature drift (fires only when the project's Java major < the feature's requirement;
+Java version read from `<java.version>`/`maven.compiler.*`/`sourceCompatibility`, default 11 for SB2 / 17 for SB3):**
+
+| rule | drift (compile failure below) | correct way | needs |
+|---|---|---|---|
+| SB_JAVA_RECORD | `public record X(...)` | regular class + constructor/getters (or Lombok) | Java 16 |
+| SB_SWITCH_ARROW | `case X ->` arrow labels | classic `case X:` + `break` | Java 14 |
+| SB_TEXT_BLOCK | `"""` text blocks | concatenated string literals | Java 15 |
+| SB_STREAM_TOLIST | `stream().…​.toList()` | `.collect(Collectors.toList())` | Java 16 |
+| SB_INSTANCEOF_PATTERN | `instanceof Type var` pattern | `instanceof` + explicit cast | Java 16 |
+| SB_SEALED | `sealed`/`non-sealed`/`permits` | regular hierarchy | Java 17 |
 
 ## Origin (evidence)
 Observed to recur in the qwen3.5-122b eval (27 SB files + generation queries):
@@ -60,5 +77,6 @@ Observed to recur in the qwen3.5-122b eval (27 SB files + generation queries):
 ## Caveats (honestly)
 - **Regex heuristic** (no Java `ast`). `SB_PLAINTEXT_SECRET` excludes `${...}` refs via negative-lookahead but may catch placeholder passwords in example/test config — use judgement.
 - `SB_FIELD_INJECT` only matches a field declaration after `@Autowired` (ends with `;`, no parens) — constructor/setter injection excluded; rare public field injection may be missed.
-- **Drift rules (error) assume SB 2.x / Java 11.** The guard reads the spring-boot version from `pom.xml`/`build.gradle` and **auto-disables them for SB3.x** (where jakarta/record are correct). With no pom found it assumes the qwen target SB2.x and keeps checking → scanning SB3 code without a pom in the path can false-positive (include the pom in the path).
+- **Drift rules are version-gated, not unconditional.** SB3-API rules read the spring-boot version from `pom.xml`/`build.gradle` and auto-disable on SB3.x; Java-feature rules read the project's Java major and fire only below each feature's requirement (verified: SB2.5.2+Java17 flags jakarta but not records). With no build file found it assumes the qwen target (SB2.x / Java 11) and keeps checking → scanning code without its build file in the path can false-positive (include the pom/gradle in the scanned path).
+- Java-feature regexes are heuristics: `case ->`/`sealed`/`permits` inside comments or string literals can match; `RestClient`/`ProblemDetail` would match a user-defined class of the same name (rare). Verified 0 false positives on a classic-Java-11 fixture (`Collectors.toList()`, plain `instanceof`, classic `switch`).
 - Quality rules (warn) mean the code runs (quality, not a bug). Drift rules (error) mean it does not compile.

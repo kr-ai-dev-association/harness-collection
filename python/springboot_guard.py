@@ -9,7 +9,11 @@ Origin (observed, 27 SB files + generation queries): System.out.println 12 ·
    @Autowired field injection 8 · plaintext password 9 · printStackTrace 2 ·
    broad catch 6 · findAll() 3 · jakarta.* import 11.
 
-Design: standard library only · no build · single file · only proven defects.
+Rules: 11 quality/security (warn) + 7 SB3-API drift (error, fire only when the build file
+   says SB2.x) + 6 Java-feature drift (error, fire only when the project's Java major is
+   below the feature's requirement). Version gates are read from pom.xml/build.gradle.
+
+Design: standard library only · no build · single file.
 Usage:  python3 springboot_guard.py <paths ...>  |  python3 springboot_guard.py --json <paths>
 Return: exit 1 if any error (version drift). Quality anti-patterns are warn (exit 0).
 """
@@ -92,9 +96,14 @@ RULES = [
      "findAll(Pageable) for paging (controllers return Page<T>/Slice<T>)"),
 ]
 
-# ── version-drift rules (SB 2.x / Java 11 baseline) = correctness ERROR ────────────
-# qwen mixes SB3/Java16+ idioms (seen more in training) into an SB2.5.2 project → compile failure
-# (same nature as a DB2 dialect leak). scan() auto-disables these if pom.xml shows SB3.x (avoid false pos).
+# ── version-drift rules = correctness ERROR (same nature as a DB2 dialect leak) ─────
+# qwen mixes SB3/Java16+ idioms (seen more in training) into an SB2.x/Java11 project →
+# compile failure. Two independent gates applied in scan():
+#   · SB gate   — DRIFT_RULES fire only when the build file says Spring Boot 2.x
+#   · Java gate — JAVA_RULES fire only when the project's Java major < the feature's need
+# Evidence tiers: rules marked CONFIRMED were observed in the qwen eval; the rest cover the
+# *factual* SB2.x/Java11 incompatibility surface (the API/feature genuinely does not exist
+# there — completeness, not speculation).
 DRIFT_RULES = [
     # CONFIRMED(11 classes observed): jakarta.persistence/servlet/validation imports.
     ("SB_JAKARTA_IMPORT", "error", JAVA,
@@ -105,20 +114,75 @@ DRIFT_RULES = [
     # CONFIRMED(SecurityConfig observed): SB3 security DSL.
     ("SB_SB3_SECURITY", "error", JAVA,
      r"authorizeHttpRequests|\.requestMatchers\s*\(|\bSecurityFilterChain\s+\w+\s*\(",
-     "SB3 security DSL (SecurityFilterChain bean/authorizeHttpRequests/requestMatchers) — unsupported on SB2.5.2",
-     "SB2.5.2: extends WebSecurityConfigurerAdapter + http.authorizeRequests().antMatchers(...)"),
+     "SB3 security DSL (SecurityFilterChain bean/authorizeHttpRequests/requestMatchers) — unsupported on SB2.5.x",
+     "SB2.5.x: extends WebSecurityConfigurerAdapter + http.authorizeRequests().antMatchers(...)"),
 
+    ("SB_ENABLE_METHOD_SEC", "error", JAVA,
+     r"@EnableMethodSecurity\b",
+     "@EnableMethodSecurity (Spring Security 5.6+/SB3) — not on SB2.5.x (ships Security 5.5)",
+     "@EnableGlobalMethodSecurity(prePostEnabled = true)"),
+
+    ("SB_RESTCLIENT", "error", JAVA,
+     r"import\s+org\.springframework\.web\.client\.RestClient\b|\bRestClient\s*\.\s*(?:builder|create)\s*\(",
+     "RestClient (Spring 6.1/SB3.2) — not on SB2.x",
+     "RestTemplate (with explicit timeouts) or WebClient"),
+
+    ("SB_PROBLEM_DETAIL", "error", JAVA,
+     r"\bProblemDetail\b",
+     "ProblemDetail (Spring 6/SB3) — not on SB2.x",
+     "custom error DTO + @ExceptionHandler/@RestControllerAdvice"),
+
+    ("SB_HTTP_EXCHANGE", "error", JAVA,
+     r"@(?:Http|Get|Post|Put|Delete|Patch)Exchange\b",
+     "@HttpExchange declarative HTTP client (Spring 6/SB3) — not on SB2.x",
+     "RestTemplate/WebClient (or OpenFeign)"),
+
+    ("SB_AUTOCONFIGURATION", "error", JAVA,
+     r"@AutoConfiguration\b",
+     "@AutoConfiguration (SB2.7+) — not on SB2.5.x",
+     "@Configuration + META-INF/spring.factories registration"),
+]
+
+# (id, severity, exts, pattern, why, fix, needs_java) — fire only when project Java < needs_java
+JAVA_RULES = [
     # CONFIRMED(MemberResponse observed): Java16+ record.
     ("SB_JAVA_RECORD", "error", JAVA,
      r"\bpublic\s+record\s+\w+\s*\(",
-     "record type (Java16+; project is Java11) — compile failure",
-     "regular class + constructor/getters (or Lombok @Getter)"),
+     "record type (Java 16+) — compile failure on this project's Java",
+     "regular class + constructor/getters (or Lombok @Getter)", 16),
+
+    ("SB_SWITCH_ARROW", "error", JAVA,
+     r"\b(?:case\s+[^:;\n]*?|default\s*)->",
+     "switch arrow labels (Java 14+) — compile failure on this project's Java",
+     "classic switch: 'case X:' + break", 14),
+
+    ("SB_TEXT_BLOCK", "error", JAVA,
+     r'"""',
+     'text block """ (Java 15+) — compile failure on this project\'s Java',
+     "concatenated string literals", 15),
+
+    ("SB_STREAM_TOLIST", "error", JAVA,
+     r"(?<!Collectors)\.toList\s*\(\s*\)",
+     "Stream.toList() (Java 16+) — compile failure on this project's Java",
+     ".collect(Collectors.toList())", 16),
+
+    ("SB_INSTANCEOF_PATTERN", "error", JAVA,
+     r"\binstanceof\s+[A-Z][\w.]*(?:<[^>]*>)?\s+[a-z]\w*",
+     "pattern-matching instanceof (Java 16+) — compile failure on this project's Java",
+     "instanceof check + explicit cast", 16),
+
+    ("SB_SEALED", "error", JAVA,
+     r"\b(?:sealed|non-sealed)\s+(?:class|interface)\b|\bpermits\s+[A-Z]",
+     "sealed class/interface (Java 17+) — compile failure on this project's Java",
+     "regular class hierarchy (document the allowed subtypes)", 17),
 ]
 
 COMPILED = [(rid, sev, exts, re.compile(pat), why, fix)
             for rid, sev, exts, pat, why, fix in RULES]
 COMPILED_DRIFT = [(rid, sev, exts, re.compile(pat), why, fix)
                   for rid, sev, exts, pat, why, fix in DRIFT_RULES]
+COMPILED_JAVA = [((rid, sev, exts, re.compile(pat), why, fix), need)
+                 for rid, sev, exts, pat, why, fix, need in JAVA_RULES]
 
 
 def iter_files(paths):
@@ -152,9 +216,32 @@ def sb_is_v2(paths):
     return True
 
 
+def java_major(paths, default):
+    """Project Java major version from pom.xml/build.gradle (gates JAVA_RULES).
+    Not found → `default` (11 for SB2 projects — the qwen target; 17 for SB3, its minimum)."""
+    for f in iter_files(paths):
+        if os.path.basename(f) in ("pom.xml", "build.gradle", "build.gradle.kts"):
+            try:
+                t = open(f, encoding="utf-8", errors="ignore").read()
+            except OSError:
+                continue
+            for pat in (r"<java\.version>\s*(?:1\.)?(\d+)",
+                        r"<maven\.compiler\.(?:source|target|release)>\s*(?:1\.)?(\d+)",
+                        r"sourceCompatibility\s*=?\s*['\"]?(?:1\.)?(\d+)",
+                        r"JavaVersion\.VERSION_(?:1_)?(\d+)",
+                        r"JavaLanguageVersion\.of\(\s*(\d+)"):
+                m = re.search(pat, t)
+                if m:
+                    return int(m.group(1))
+    return default
+
+
 def scan(paths):
     out = []
-    rules = COMPILED + (COMPILED_DRIFT if sb_is_v2(paths) else [])
+    v2 = sb_is_v2(paths)
+    jmaj = java_major(paths, 11 if v2 else 17)
+    rules = COMPILED + (COMPILED_DRIFT if v2 else []) \
+        + [r for r, need in COMPILED_JAVA if jmaj < need]
     for f in iter_files(paths):
         if not f.endswith(JAVA + CFG):
             continue
