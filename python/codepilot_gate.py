@@ -44,6 +44,11 @@ def run_guards(target):
     return findings
 
 
+# extensions/names either guard can match — anything else is a guaranteed no-op
+RELEVANT_EXTS = (".sql", ".xml", ".java", ".yml", ".yaml", ".properties")
+RELEVANT_NAMES = ("pom.xml", "build.gradle", "build.gradle.kts")
+
+
 def main():
     inp = read_input()
     cwd = inp.get("cwd") or os.getcwd()
@@ -59,6 +64,13 @@ def main():
             if os.path.exists(cand):
                 target = cand
                 break
+
+    # fast path: a single irrelevant file (.ts/.py/.vue ...) can never produce findings —
+    # skip spawning the guards entirely (every write pays ~1 python spawn instead of 3).
+    if target != cwd and not (target.endswith(RELEVANT_EXTS)
+                              or os.path.basename(target) in RELEVANT_NAMES):
+        print(json.dumps({"continue": True}))
+        return
 
     findings = run_guards(target)
     errors = [f for f in findings if f.get("severity") == "error"]
