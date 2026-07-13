@@ -12,10 +12,14 @@ git clone https://github.com/kr-ai-dev-association/harness-collection
 cd harness-collection
 
 # 2) Read the harness's .md (skill doc), then run the same-named code
-#    python — checker:
+#    python — checkers (exit 1 on error → wire into CI):
 python3 python/fastapi_guard.py <TARGET_DIR>
+python3 python/db2_guard.py <TARGET_DIR>          # DB2 dialect leaks
+python3 python/springboot_guard.py <TARGET_DIR>   # Spring Boot anti-patterns + version drift
 #    python — LLM call helper: import from code
 #      from llm_client import chat, with_today, extract_json   (add python/ to sys.path)
+#    python — eval orchestrator:
+#      python3 python/eval_harness.py --queries <DIR> --cli 'bun cli.ts -p {q} --json --yes' --out /tmp/eval
 #    nodejs — Playwright runner:
 nodejs/e2e-llm-harness/e2e-harness --cwd <APP_DIR>
 ```
@@ -52,6 +56,12 @@ python/
   fastapi_guard.md        # ^ doc
   llm_client.py           # OpenAI-compatible LLM call helper (thinking off)
   llm_client.md           # ^ doc
+  db2_guard.py            # DB2 dialect-leak static checker (PG/MySQL → DB2)
+  db2_guard.md            # ^ doc
+  springboot_guard.py     # Spring Boot anti-pattern + version-drift checker
+  springboot_guard.md     # ^ doc
+  eval_harness.py         # LLM-agent bulk eval orchestrator
+  eval_harness.md         # ^ doc
 ```
 
 ## Catalog
@@ -61,5 +71,9 @@ python/
 | nodejs | [e2e-llm-harness](nodejs/e2e-llm-harness/e2e-llm-harness.md) | Install Playwright, discover specs, run, output as-is |
 | python | [fastapi_guard](python/fastapi_guard.md) | Static check for recurring defects in LLM-generated backend code |
 | python | [llm_client](python/llm_client.md) | Call an OpenAI-compatible LLM (thinking disabled, defensive parsing) |
+| python | [db2_guard](python/db2_guard.md) | Static check for PG/MySQL/T-SQL dialect leaking into DB2 SQL/config (24 rules, exit 1) |
+| python | [springboot_guard](python/springboot_guard.md) | Static check for Spring Boot anti-patterns (warn) + SB3-API/Java-feature version drift (13 error rules, SB+Java version gated) |
+| python | [eval_harness](python/eval_harness.md) | Orchestrate LLM-agent eval batches (process-group timeout, retry, model-verify, seed) |
+| python | [codepilot_gate](python/codepilot_gate.md) | codepilot PostToolUse hook adapter — auto gate + self-fix loop for the guards |
 
 Each harness aims to be a single dependency-free, build-free file, or a directory when it gets complex.
